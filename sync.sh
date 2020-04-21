@@ -1,6 +1,6 @@
 #!/bin/bash
 
-GCR_NAMESPACE=gcr.io/fuzzbench/fuzzbench
+GCR_NAMESPACE=gcr.io/fuzzbench
 DOCKERHUB_NAMESPACE=mengnanpeter
 
 today(){
