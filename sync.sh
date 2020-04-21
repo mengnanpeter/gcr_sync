@@ -89,9 +89,11 @@ auth_sdk(){
 
 #  GCR_IMAGE_NAME  tag  REPO_IMAGE_NAME
 image_tag(){
+    echo "peter here pull?"
     docker pull $1:$2
     docker tag $1:$2 $3:$2
     docker rmi $1:$2
+    echo "image_tag over"
 }
 
 img_clean(){
