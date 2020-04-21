@@ -178,7 +178,9 @@ image_pull(){
 	echo "peter debug3: "$image_name
 	echo "peter debug4: "$MY_REPO_IMAGE_NAME
         [ ! -d "$domain/$namespace/$image_name" ] && mkdir -p "$domain/$namespace/$image_name"
+	echo "fuckhere"
         [ -f "$domain/$namespace/$image_name"/latest ] && mv $domain/$namespace/$image_name/latest{,.old}
+	echo "fuckhere1"
         while read tag;do
         #处理latest标签
 	    echo "peter confused: "$tag
