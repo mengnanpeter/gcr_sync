@@ -185,6 +185,7 @@ image_pull(){
 	echo "fuckhere"
         [ -f "$domain/$namespace/$image_name"/latest ] && mv $domain/$namespace/$image_name/latest{,.old}
 	echo "fuckhere1"
+	echo $($@::tag $SYNC_IMAGE_NAME)
         while read tag;do
         #处理latest标签
 	    echo "peter confused: "$tag
