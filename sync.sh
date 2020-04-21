@@ -154,8 +154,9 @@ image_pull(){
     domain=${REPOSITORY%%/*}
     namespace=${REPOSITORY##*/}
     Prefix=$domain$interval$namespace$interval
-    echo "peter debug: "$domain
-    echo "peter debug: "$namespace
+    echo "peter debug0: "$REPOSITORY
+    echo "peter debug1: "$domain
+    echo "peter debug2: "$namespace
     # REPOSITORY is the name of the dir,convert the '/' to '.',and cut the last '.'
     [ ! -d "$domain/$namespace" ] && mkdir -p $domain/$namespace
     while read SYNC_IMAGE_NAME;do
@@ -170,8 +171,8 @@ image_pull(){
 		# 过滤结束, 只下载需要的镜像
         image_name=${SYNC_IMAGE_NAME##*/}
         MY_REPO_IMAGE_NAME=${Prefix}${image_name}
-	echo "peter debug: "$imagename
-	echo "peter debug: "$MY_REPO_IMAGE_NAME
+	echo "peter debug3: "$imagename
+	echo "peter debug4: "$MY_REPO_IMAGE_NAME
         [ ! -d "$domain/$namespace/$image_name" ] && mkdir -p "$domain/$namespace/$image_name"
         [ -f "$domain/$namespace/$image_name"/latest ] && mv $domain/$namespace/$image_name/latest{,.old}
         while read tag;do
