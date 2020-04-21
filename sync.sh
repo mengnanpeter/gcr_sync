@@ -97,6 +97,7 @@ image_tag(){
 img_clean(){
     local domain=$1 namespace=$2 image_name=$3
     local Prefix=$domain$interval$namespace$interval
+    echo "peter debug 6: "$Prefix" xxxxxx "$img
     shift 3
     while read img tag null;do
         docker push $img:$tag;docker rmi $img:$tag;
