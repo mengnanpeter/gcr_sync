@@ -161,6 +161,7 @@ image_pull(){
     # REPOSITORY is the name of the dir,convert the '/' to '.',and cut the last '.'
     [ ! -d "$domain/$namespace" ] && mkdir -p $domain/$namespace
     while read SYNC_IMAGE_NAME;do
+	    	echo "peter debug 2.5: "$SYNC_IMAGE_NAME
 	    # 过滤开始, 只下载需要的镜像
 		fr1=$(echo $SYNC_IMAGE_NAME | grep -i "kube")
 		fr2=$(echo $SYNC_IMAGE_NAME | grep -i "etcd")
