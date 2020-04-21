@@ -171,7 +171,7 @@ image_pull(){
 		# 过滤结束, 只下载需要的镜像
         image_name=${SYNC_IMAGE_NAME##*/}
         MY_REPO_IMAGE_NAME=${Prefix}${image_name}
-	echo "peter debug3: "$imagename
+	echo "peter debug3: "$image_name
 	echo "peter debug4: "$MY_REPO_IMAGE_NAME
         [ ! -d "$domain/$namespace/$image_name" ] && mkdir -p "$domain/$namespace/$image_name"
         [ -f "$domain/$namespace/$image_name"/latest ] && mv $domain/$namespace/$image_name/latest{,.old}
@@ -193,6 +193,7 @@ image_pull(){
         done < <($@::tag $SYNC_IMAGE_NAME)
         wait
         img_clean $domain $namespace $image_name $@::latest_digest
+	echo "peter debug5: img clean heheh"
     done < <($@::name $REPOSITORY)
 }
 
