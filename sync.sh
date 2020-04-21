@@ -181,6 +181,7 @@ image_pull(){
         [ -f "$domain/$namespace/$image_name"/latest ] && mv $domain/$namespace/$image_name/latest{,.old}
         while read tag;do
         #处理latest标签
+	    echo "peter confused: "$tag
             [[ "$tag" == latest && -f "$domain/$namespace/$image_name"/latest.old ]] && {
                 $@::latest_digest $SYNC_IMAGE_NAME > $domain/$namespace/$image_name/latest
                 diff $domain/$namespace/$image_name/latest{,.old} &>/dev/null &&
