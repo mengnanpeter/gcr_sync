@@ -1,10 +1,18 @@
 #!/bin/bash
+max_process=$1
+MY_REPO=mengnanpeter
+interval=.
+max_per=70
+google_list=repo/google
+#--------------------------
 
-GCR_NAMESPACE=gcr.io/fuzzbench
-DOCKERHUB_NAMESPACE=mengnanpeter
-
-today(){
-   date +%F
+Multi_process_init() {
+    trap 'exec 5>&-;exec 5<&-;exit 0' 2
+    pipe=`mktemp -u tmp.XXXX`
+    mkfifo $pipe
+    exec 5<>$pipe
+    rm -f $pipe
+    seq $1 >&5
 }
 
 git_init(){
@@ -25,8 +33,8 @@ git_init(){
 
 git_commit(){
      local COMMIT_FILES_COUNT=$(git status -s|wc -l)
-     local TODAY=$(today)
-     if [ $COMMIT_FILES_COUNT -ne 0 ];then
+     local TODAY=$(date +%F)
+     if [[ $COMMIT_FILES_COUNT -ne 0 && $(( (`date +%s` - start_time)/60 ))  -gt 45 ]];then
         git add -A
         git commit -m "Synchronizing completion at $TODAY"
         git push -u origin develop
@@ -47,9 +55,9 @@ EOF
 }
 
 add_apt_source(){
-export CLOUD_SDK_REPO="cloud-sdk-$(lsb_release -c -s)"
-echo "deb http://packages.cloud.google.com/apt $CLOUD_SDK_REPO main" | sudo tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
-curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -
+    export CLOUD_SDK_REPO="cloud-sdk-$(lsb_release -c -s)"
+    echo "deb http://packages.cloud.google.com/apt $CLOUD_SDK_REPO main" | sudo tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
+    curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -
 }
 
 install_sdk() {
@@ -74,143 +82,199 @@ install_sdk() {
 
 auth_sdk(){
     local AUTH_COUNT=$(gcloud auth list --format="get(account)"|wc -l)
-    if [ $AUTH_COUNT -eq 0 ];then
-        gcloud auth activate-service-account --key-file=$HOME/gcloud.config.json
-    else
+    [ "$AUTH_COUNT" -eq 0 ] && gcloud auth activate-service-account --key-file=$HOME/gcloud.config.json ||
         echo "gcloud service account is exsits"
-    fi
 }
 
-repository_list() {
-    if ! [ -f repo_list.txt ];then
-        gcloud container images list --repository=${GCR_NAMESPACE} --format="value(NAME)" > repo_list.txt && \
-        echo "get repository list done"
-    else
-        /bin/mv  -f repo_list.txt old_repo_list.txt
-        gcloud container images list --repository=${GCR_NAMESPACE} --format="value(NAME)" > repo_list.txt && \
-        echo "get repository list done"
-        DEL_REPO=($(diff  -B -c  old_repo_list.txt repo_list.txt |grep -Po '(?<=^\- ).+|xargs')) && \
-        rm -f old_repo_list.txt
-        if [ ${#DEL_REPO} -ne 0 ];then
-            for i in ${DEL_REPO[@]};do
-                rm -rf ${i##*/}
-            done
-        fi
-    fi
+
+#  GCR_IMAGE_NAME  tag  REPO_IMAGE_NAME
+image_tag(){
+    docker pull $1:$2
+    docker tag $1:$2 $3:$2
+    docker rmi $1:$2
 }
 
-generate_changelog(){
-    if  ! [ -f CHANGELOG.md ];then
-        echo  >> CHANGELOG.md
-    fi
-
-}
-
-push_image(){
-    GCR_IMAGE=$1
-    DOCKERHUB_IMAGE=$2
-    docker pull ${GCR_IMAGE}
-    docker tag ${GCR_IMAGE} ${DOCKERHUB_IMAGE}
-    docker push ${DOCKERHUB_IMAGE}
-    echo "$IMAGE_TAG_SHA" > ${IMAGE_NAME}/${i}
-    sed -i  "1i\- ${DOCKERHUB_IMAGE}"  CHANGELOG.md
-}
-
-clean_images(){
-     IMAGES_COUNT=$(docker image ls|wc -l)
-     if [ $IMAGES_COUNT -gt 1 ];then
-         docker image prune -a -f
-     fi
-}
-
-clean_disk(){
-    DODCKER_ROOT_DIR=$(docker info --format '{{json .}}'|jq  -r '.DockerRootDir')
-    USAGE=$(df $DODCKER_ROOT_DIR|awk -F '[ %]+' 'NR>1{print $5}')
-    if [ $USAGE -eq 80 ];then
-        wait
-        clean_images
-    fi
-}
-
-main() {
-    git_init
-    install_sdk
-    auth_sdk
-    repository_list
-    generate_changelog
-    TODAY=$(today)
-    PROGRESS_COUNT=0
-    LINE_NUM=0
-    LAST_REPOSITORY=$(tail -n 1 repo_list.txt)
-    while read GCR_IMAGE_NAME;do
-        let LINE_NUM++
-        IMAGE_INFO_JSON=$(gcloud container images list-tags $GCR_IMAGE_NAME  --filter="tags:*" --format=json)
-        TAG_INFO_JSON=$(echo "$IMAGE_INFO_JSON"|jq '.[]|{ tag: .tags[] ,digest: .digest }')
-        TAG_LIST=($(echo "$TAG_INFO_JSON"|jq -r .tag))
-	
-	array=(${GCR_NAMESPACE//// })
-	echoinfo=""
-	for var in ${array[@]}
-	do
-		echoinfo=$echoinfo$var"."
-	done
-
-        IMAGE_NAME=$echoinfo${GCR_IMAGE_NAME##*/}
-	echo "peter: save as "$IMAGE_NAME
-        if [ -f  breakpoint.txt ];then
-           SAVE_DAY=$(head -n 1 breakpoint.txt)
-           if [[ $SAVE_DAY != $TODAY ]];then
-             :> breakpoint.txt
-           else
-               BREAK_LINE=$(tail -n 1 breakpoint.txt)
-               if [ $LINE_NUM -lt $BREAK_LINE ];then
-                   continue
-               fi
-           fi
-        fi
-        for i in ${TAG_LIST[@]};do
-            GCR_IMAGE=${GCR_IMAGE_NAME}:${i}
-            DOCKERHUB_IMAGE=${DOCKERHUB_NAMESPACE}/${IMAGE_NAME}:${i}
-            IMAGE_TAG_SHA=$(echo "${TAG_INFO_JSON}"|jq -r "select(.tag == \"$i\")|.digest")
-            if [[ $GCR_IMAGE_NAME == $LAST_REPOSITORY ]];then
-                LAST_TAG=${TAG_LIST[-1]}
-                LAST_IMAGE=${LAST_REPOSITORY}:${LAST_TAG}
-                if [[ $GCR_IMAGE  == $LAST_IMAGE ]];then
-                    wait
-                    clean_images
-                fi
-            fi
-            if [ -f $IMAGE_NAME/$i ];then
-                echo "$IMAGE_TAG_SHA"  > /tmp/diff.txt
-                if ! diff /tmp/diff.txt $IMAGE_NAME/$i &> /dev/null ;then
-                     clean_disk
-                     push_image $GCR_IMAGE $DOCKERHUB_IMAGE &
-                     let PROGRESS_COUNT++
-                fi
-            else
-                mkdir -p $IMAGE_NAME
-                clean_disk
-                push_image $GCR_IMAGE $DOCKERHUB_IMAGE &
-                let PROGRESS_COUNT++
-            fi
-            COUNT_WAIT=$[$PROGRESS_COUNT%50]
-            if [ $COUNT_WAIT -eq 0 ];then
-               wait
-               clean_images
-               git_commit
-            fi
-        done
-        if [ $COUNT_WAIT -eq 0 ];then
-            wait
-            clean_images
-            git_commit
-        fi
-
-        echo "sync image $MY_REPO/$IMAGE_NAME done."
-        echo -e "$TODAY\n$LINE_NUM" > breakpoint.txt
-    done < repo_list.txt 
-    sed -i "1i-------------------------------at $(date +'%F %T') sync image repositorys-------------------------------"  CHANGELOG.md
+img_clean(){
+    local domain=$1 namespace=$2 image_name=$3
+    local Prefix=$domain$interval$namespace$interval
+    shift 3
+    while read img tag null;do
+        docker push $img:$tag;docker rmi $img:$tag;
+        [ "$tag" != latest ] && echo $domain/$namespace/$image_name:$tag > $domain/$namespace/$image_name/$tag ||
+            $@ $domain/$namespace/$image_name > $domain/$namespace/$image_name/$tag
+        git_commit
+    done < <(docker images --format {{.Repository}}' '{{.Tag}}' '{{.Size}} | awk -vcut=$MY_REPO/$Prefix '$0~cut{print $0 | "sort -hk3" }')
     git_commit
 }
 
+# google::name(){
+#     gcloud container images list --repository=$@ --format="value(NAME)"
+# }
+# google::tag(){
+#     gcloud container images list-tags $@  --format="get(TAGS)" --filter='tags:*' | sed 's#;#\n#g'
+# }
+# google::latest::digest(){
+#     gcloud container images list-tags --format='get(DIGEST)' $@ --filter="tags=latest"
+# }
+
+google::name(){
+    curl -XPOST -ks 'https://console.cloud.google.com/m/gcr/entities/list' \
+           -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/68.0.3440.7 Safari/537.36' \
+           -H 'Content-Type: application/json;charset=UTF-8' \
+           -H 'Accept: application/json, text/plain, */*' \
+           --data-binary ['"'"${@#*/}"'"']   |
+        awk -vio=$@ -F'"' '/"/{if(NR==3){if(!a[$4]++)print io"/"$4}else{if(!a[$2]++)print io"/"$2}}'
+}
+google::tag(){
+    read null ns name< <(tr '/' ' '<<<$@)
+    curl -ks -XGET https://gcr.io/v2/${ns}/${name}/tags/list | jq -r .tags[]
+}
+google::latest_digest(){
+    read null ns name< <(tr '/' ' '<<<$@)
+    curl -ks -XGET https://gcr.io/v2/${ns}/${name}/tags/list | jq -r '.manifest | with_entries(select(.value.tag[] == "latest"))|keys[]'
+}
+
+#quay::name(){
+#    NS=${1#*/}
+#    curl -sL 'https://quay.io/api/v1/repository?public=true&namespace='${NS} | jq -r '"quay.io/'${NS}'/"'" + .repositories[].name"
+#}
+#quay::tag(){
+#    curl -sL "https://quay.io/api/v1/repository/${@#*/}?tag=info"  | jq -r .tags[].name
+#}
+#quay::latest_digest(){
+# #    curl -sL "https://quay.io/api/v1/repository/prometheus/alertmanager/tag" | jq -r '.tags[]|select(.name == "latest" and (.|length) == 5 ).manifest_digest'
+#   curl -sL "https://quay.io/api/v1/repository/${@#*/}?tag=info" | jq -r '.tags[]|select(.name == "latest" and (has("end_ts")|not) ).manifest_digest'
+#}
+
+
+image_pull(){
+    REPOSITORY=$1
+    echo 'Sync the '$REPOSITORY
+    shift
+    domain=${REPOSITORY%%/*}
+    namespace=${REPOSITORY##*/}
+    Prefix=$domain$interval$namespace$interval
+    echo "peter debug: "$domain
+    echo "peter debug: "$namespace
+    # REPOSITORY is the name of the dir,convert the '/' to '.',and cut the last '.'
+    [ ! -d "$domain/$namespace" ] && mkdir -p $domain/$namespace
+    while read SYNC_IMAGE_NAME;do
+	    # 过滤开始, 只下载需要的镜像
+		fr1=$(echo $SYNC_IMAGE_NAME | grep -i "kube")
+		fr2=$(echo $SYNC_IMAGE_NAME | grep -i "etcd")
+		fr3=$(echo $SYNC_IMAGE_NAME | grep -i "DNS")
+		if [[ fr1 == "" && fr2 == "" && fr3 == "" ]];then
+		    echo "ignore image: "$SYNC_IMAGE_NAME
+		    continue
+		fi
+		# 过滤结束, 只下载需要的镜像
+        image_name=${SYNC_IMAGE_NAME##*/}
+        MY_REPO_IMAGE_NAME=${Prefix}${image_name}
+	echo "peter debug: "$imagename
+	echo "peter debug: "$MY_REPO_IMAGE_NAME
+        [ ! -d "$domain/$namespace/$image_name" ] && mkdir -p "$domain/$namespace/$image_name"
+        [ -f "$domain/$namespace/$image_name"/latest ] && mv $domain/$namespace/$image_name/latest{,.old}
+        while read tag;do
+        #处理latest标签
+            [[ "$tag" == latest && -f "$domain/$namespace/$image_name"/latest.old ]] && {
+                $@::latest_digest $SYNC_IMAGE_NAME > $domain/$namespace/$image_name/latest
+                diff $domain/$namespace/$image_name/latest{,.old} &>/dev/null &&
+                    { rm -f $domain/$namespace/$image_name/latest.old;continue; } ||
+                      rm $domain/$namespace/$image_name/latest{,.old}
+            }
+            [ -f "$domain/$namespace/$image_name/$tag" ] && { trvis_live;continue; }
+            [[ $(df -h| awk  '$NF=="/"{print +$5}') -ge "$max_per" || -n $(sync_commit_check) ]] && { wait;img_clean $domain $namespace $image_name $@::latest_digest; }
+            read -u5
+            {
+                [ -n "$tag" ] && image_tag $SYNC_IMAGE_NAME $tag $MY_REPO/$MY_REPO_IMAGE_NAME
+                echo >&5
+            }&
+        done < <($@::tag $SYNC_IMAGE_NAME)
+        wait
+        img_clean $domain $namespace $image_name $@::latest_digest
+    done < <($@::name $REPOSITORY)
+}
+
+sync_commit_check(){
+    [[ $(( (`date +%s` - start_time)/60 )) -gt 40 || -n "$(docker images | awk '$NF~"GB"')" ]] &&
+        echo ture || false
+}
+
+# img_name tag
+hub_tag_exist(){
+    curl -s https://hub.docker.com/v2/repositories/${MY_REPO}/$1/tags/$2/ | jq -r .name
+}
+
+
+trvis_live(){
+    [ $(( (`date +%s` - live_start_time)/60 )) -ge 8 ] && { live_start_time=$(date +%s);echo 'for live in the travis!'; }
+}
+
+sync_domain_repo(){
+    path=${1%/}
+    local name tag
+    while read name tag;do
+        img_name=$( sed 's#/#'"$interval"'#g'<<<$name )
+        trvis_live       
+        read -u5
+        {
+            [ "$( hub_tag_exist $img_name $tag )" == null ] && rm -f $name/$tag
+            echo >&5
+        }&
+    done < <( find $path/ -type f | sed 's#/# #3' )
+    wait
+    git_commit
+}
+
+
+main(){
+    
+    [ -z "$start_time" ] && start_time=$(date +%s)
+    git_init
+    # install_sdk
+    # auth_sdk
+    Multi_process_init $(( max_process * 4 ))
+    live_start_time=$(date +%s)
+    read sync_time < sync_check
+    [ $(( (`date +%s` - sync_time)/3600 )) -ge 6 ] && {
+        [ ! -f sync_list_ns ] && ls gcr.io > sync_list_ns
+        allns=(`xargs -n1 < sync_list_ns`)
+
+        for ns in ${allns[@]};do 
+            [ ! -f sync_list_name ] && ls gcr.io/$ns > sync_list_name
+            allname=(`xargs -n1 < sync_list_name`)
+            for name in ${allname[@]};do
+                sync_domain_repo gcr.io/$ns/$name
+                perl  -i -lne 'print if $_ ne "'$name'"' sync_list_name
+            done
+            rm -f sync_list_name
+            perl  -i -lne 'print if $_ ne "'$ns'"' sync_list_ns
+        done
+        rm -f sync_list_ns
+        echo the sync has done! 
+        date +%s > sync_check
+        git_commit
+    }
+    exec 5>&-;exec 5<&-
+    
+    Multi_process_init $max_process
+
+    GOOLE_NAMESPACE=(`xargs -n1 < $google_list`)
+    for repo in ${GOOLE_NAMESPACE[@]};do
+        image_pull gcr.io/$repo google
+        sed -i '/'"$repo"'/d' $google_list;echo "$repo" >> $google_list
+    done
+
+    exec 5>&-;exec 5<&-
+    
+    COMMIT_FILES_COUNT=$(git status -s|wc -l)
+    TODAY=$(date +%F)
+    if [ $COMMIT_FILES_COUNT -ne 0 ];then
+        git add -A
+        git commit -m "Synchronizing completion at $TODAY"
+        git push -u origin develop
+    fi
+}
+
 main
+
