@@ -147,7 +147,16 @@ main() {
         IMAGE_INFO_JSON=$(gcloud container images list-tags $GCR_IMAGE_NAME  --filter="tags:*" --format=json)
         TAG_INFO_JSON=$(echo "$IMAGE_INFO_JSON"|jq '.[]|{ tag: .tags[] ,digest: .digest }')
         TAG_LIST=($(echo "$TAG_INFO_JSON"|jq -r .tag))
-        IMAGE_NAME=${GCR_IMAGE_NAME##*/}
+	
+	array=(${GCR_NAMESPACE//// })
+	echoinfo=""
+	for var in ${array[@]}
+	do
+		echoinfo=$echoinfo$var"."
+	done
+
+        IMAGE_NAME=$echoinfo${GCR_IMAGE_NAME##*/}
+	echo "peter: save as "$IMAGE_NAME
         if [ -f  breakpoint.txt ];then
            SAVE_DAY=$(head -n 1 breakpoint.txt)
            if [[ $SAVE_DAY != $TODAY ]];then
