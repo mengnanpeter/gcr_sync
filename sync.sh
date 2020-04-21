@@ -154,7 +154,10 @@ image_pull(){
     REPOSITORY=$1
     echo 'Sync the '$REPOSITORY
     shift
-    domain=${REPOSITORY%%/*}
+
+    domain1=${REPOSITORY%/*}
+    domain=${REPOSITORY%/*}
+    domain=${domain////.}
     namespace=${REPOSITORY##*/}
     Prefix=$domain$interval$namespace$interval
     echo "peter debug0: "$REPOSITORY
@@ -177,15 +180,11 @@ image_pull(){
         MY_REPO_IMAGE_NAME=${Prefix}${image_name}
 	echo "peter debug3: "$image_name
 	echo "peter debug4: "$MY_REPO_IMAGE_NAME
-	if [ ! -d "$domain/$namespace/$image_name" ];then
-		echo "ffffuck"
-	fi
-	echo "ffffffuck again"
         [ ! -d "$domain/$namespace/$image_name" ] && mkdir -p "$domain/$namespace/$image_name"
-	echo "fuckhere"
         [ -f "$domain/$namespace/$image_name"/latest ] && mv $domain/$namespace/$image_name/latest{,.old}
-	echo "fuckhere1"
-	echo $($@::tag $SYNC_IMAGE_NAME)
+
+	SYNC_IMAGE_LOC=$domain"/"$namespace"/"$image_name
+	echo "peter debug: "$SYNC_IMAGE_LOC
         while read tag;do
         #处理latest标签
 	    echo "peter confused: "$tag
@@ -202,7 +201,8 @@ image_pull(){
                 [ -n "$tag" ] && image_tag $SYNC_IMAGE_NAME $tag $MY_REPO/$MY_REPO_IMAGE_NAME
                 echo >&5
             }&
-        done < <($@::tag $SYNC_IMAGE_NAME)
+         done < <($@::tag $SYNC_IMAGE_LOC)
+#        done < <($@::tag $SYNC_IMAGE_NAME)
         wait
         img_clean $domain $namespace $image_name $@::latest_digest
 	echo "peter debug5: img clean heheh"
