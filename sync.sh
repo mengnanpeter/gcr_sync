@@ -177,6 +177,10 @@ image_pull(){
         MY_REPO_IMAGE_NAME=${Prefix}${image_name}
 	echo "peter debug3: "$image_name
 	echo "peter debug4: "$MY_REPO_IMAGE_NAME
+	if [ ! -d "$domain/$namespace/$image_name" ];then
+		echo "ffffuck"
+	fi
+	echo "ffffffuck again"
         [ ! -d "$domain/$namespace/$image_name" ] && mkdir -p "$domain/$namespace/$image_name"
 	echo "fuckhere"
         [ -f "$domain/$namespace/$image_name"/latest ] && mv $domain/$namespace/$image_name/latest{,.old}
